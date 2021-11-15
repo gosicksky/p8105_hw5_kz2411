@@ -1,0 +1,114 @@
+---
+title: "p8105_hw5_kz2411"
+author: "Keming Zhang"
+date: "11/14/2021"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(rvest)
+library(broom)
+```
+
+## Problem 1
+```{r clean and group}
+homicide_data_raw <- read_csv("data/homicide-data.csv")
+homicide_data_process <- homicide_data_raw %>%
+  mutate(
+    city_state = paste(city,state,sep = ", ")
+  ) 
+
+homicide_unsolved <- homicide_data_process %>%
+  group_by(city_state) %>%
+  summarize(
+    homicide_num = n(),
+    disposition = disposition
+  ) %>%
+  filter(disposition %in% c("Closed without arrest","Open/No arrest")) %>%
+  group_by(city_state) %>%
+  summarize(
+    homicide_num = homicide_num,
+    unsolved_num = n()
+  ) %>%
+  distinct()
+```
+
+
+```{r prop.test}
+prop_test_data <- homicide_unsolved %>%
+  filter(city_state == "Baltimore, MD")
+prop_test <- prop.test(pull(prop_test_data,unsolved_num),pull(prop_test_data,homicide_num))
+tidy(prop_test)
+```
+
+```{r prop.test map}
+interval_all <- homicide_unsolved %>%
+  mutate(
+    prop_test = map2(unsolved_num, homicide_num, prop.test),
+    prop_test = map(prop_test, tidy)
+  ) %>%
+  unnest(cols = prop_test) %>%
+  select(city_state,estimate,conf.low,conf.high)
+```
+
+```{r plot}
+plot <- interval_all %>%
+  arrange(estimate) %>%
+  ggplot(aes(x = fct_reorder(city_state,estimate), y = estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  labs(
+    title = "The estimates and CIs for each city",
+    x = "City",
+    y = "Estimate"
+  ) +
+  theme(axis.text.x = element_text(angle = 270, hjust = 0))
+
+plot
+```
+
+
+## Problem 2
+```{r}
+data_path <- "data/problem2_data"
+file_list = list.files(data_path) %>%
+  data.frame()
+colnames(file_list) <- c("file")
+```
+
+```{r}
+combine_data <- file_list %>%
+  mutate(
+    complete_file = paste(data_path,file,sep = '/'),
+    file_contents = map(complete_file,read_csv)
+  ) %>%
+  unnest(cols = file_contents) %>%
+  select(file,week_1:week_8)
+```
+
+
+## Problem 3
+```{r}
+set.seed(10)
+
+iris_with_missing = iris %>% 
+  map_df(~replace(.x, sample(1:150, 20), NA)) %>%
+  mutate(Species = as.character(Species))
+```
+
+```{r fill missing}
+fill_missing = function(x) {
+  if (is.numeric(x)) {
+    x = ifelse(is.na(x),mean(x,na.rm = TRUE), x)
+  }
+  else if (is.character(x)) {
+    x = ifelse(is.na(x),"virginica",x)
+  }
+}
+
+iris_no_missing <- map_dfr(iris_with_missing,fill_missing)
+  
+```
+
