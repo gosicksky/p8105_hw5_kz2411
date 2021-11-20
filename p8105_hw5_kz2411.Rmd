@@ -6,56 +6,81 @@ output: github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,
+                      fig.width = 8,
+                      fig.asp = .8,
+                      out.width = "80%"
+                      )
 library(tidyverse)
 library(rvest)
 library(broom)
+library(naniar)
 ```
 
 ## Problem 1
+
+```{r load data}
+#load data
+homicide_data_raw <- read_csv("data/homicide-data.csv", na = c("","unknown"))
+```
+
+The raw data has `r nrow(homicide_data_raw)` observations. There are `r ncol(homicide_data_raw)` variables, and they are `r colnames(homicide_data_raw)`. Their types are numeric and character.
+
+
 ```{r clean and group}
-homicide_data_raw <- read_csv("data/homicide-data.csv")
+#clean and group
 homicide_data_process <- homicide_data_raw %>%
   mutate(
     city_state = paste(city,state,sep = ", ")
-  ) 
+  )
 
+#total number of homicides and the number of unsolved homicides 
 homicide_unsolved <- homicide_data_process %>%
   group_by(city_state) %>%
+  #calculate number of homicides
   summarize(
     homicide_num = n(),
     disposition = disposition
   ) %>%
   filter(disposition %in% c("Closed without arrest","Open/No arrest")) %>%
   group_by(city_state) %>%
+  #calculate number of unsolved homicides
   summarize(
     homicide_num = homicide_num,
     unsolved_num = n()
   ) %>%
   distinct()
+
+homicide_unsolved
 ```
 
 
 ```{r prop.test}
-prop_test_data <- homicide_unsolved %>%
+#prop.test on Baltimore, MD
+baltimore_data <- homicide_unsolved %>%
   filter(city_state == "Baltimore, MD")
-prop_test <- prop.test(pull(prop_test_data,unsolved_num),pull(prop_test_data,homicide_num))
-tidy(prop_test)
+baltimore_prop_test <- prop.test(pull(baltimore_data,unsolved_num),pull(baltimore_data,homicide_num))
+tidy(baltimore_prop_test)
 ```
 
 ```{r prop.test map}
-interval_all <- homicide_unsolved %>%
+#calculate interval for all cities
+city_prop_data <- homicide_unsolved %>%
   mutate(
     prop_test = map2(unsolved_num, homicide_num, prop.test),
     prop_test = map(prop_test, tidy)
   ) %>%
   unnest(cols = prop_test) %>%
   select(city_state,estimate,conf.low,conf.high)
+
+city_prop_data
 ```
 
-```{r plot}
-plot <- interval_all %>%
+```{r plot city}
+#plot for city
+city_plot <- city_prop_data %>%
   arrange(estimate) %>%
+  #order by estimate
   ggplot(aes(x = fct_reorder(city_state,estimate), y = estimate)) +
   geom_point() +
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
@@ -66,19 +91,21 @@ plot <- interval_all %>%
   ) +
   theme(axis.text.x = element_text(angle = 270, hjust = 0))
 
-plot
+city_plot
 ```
 
 
 ## Problem 2
-```{r}
+```{r file list}
+#file list
 data_path <- "data/problem2_data"
 file_list = list.files(data_path) %>%
   data.frame()
 colnames(file_list) <- c("file")
 ```
 
-```{r}
+```{r load file}
+#load file
 combine_data <- file_list %>%
   mutate(
     complete_file = paste(data_path,file,sep = '/'),
@@ -88,27 +115,72 @@ combine_data <- file_list %>%
   select(file,week_1:week_8)
 ```
 
+```{r clean data}
+#rename column
+colnames(combine_data)[1] <- c("group_id")
+
+#clean data
+data_clean <- combine_data %>%
+  janitor::clean_names() %>%
+  mutate(
+    group_id = gsub("con","control",group_id),
+    group_id = gsub("exp","experimental",group_id),
+    group_id = gsub(".csv","",group_id)
+  )
+```
+
+```{r plot spaghetti}
+plot_data <- data_clean %>%
+  pivot_longer(
+    week_1:week_8,
+    names_to = "week",
+    values_to = "observation",
+    names_prefix = "week_"
+  )
+
+spaghetti_plot <- plot_data %>%
+  ggplot(aes(x = week, y = observation, color = group_id, group = group_id)) +
+  geom_line() +
+  geom_point() +
+  labs(
+    title = "Spaghetti plot for different groups"
+  )
+
+spaghetti_plot
+```
+
+From the plot, we can see that those from the experimental arm have higher observations than those form the control arm during week 8. And observations of those from the experimental arm increase over time, while observations of those from the control arm fluctuate up and down.
 
 ## Problem 3
 ```{r}
+#load data
 set.seed(10)
 
 iris_with_missing = iris %>% 
   map_df(~replace(.x, sample(1:150, 20), NA)) %>%
   mutate(Species = as.character(Species))
+
+#checking missing
+miss_var_summary(iris_with_missing) %>% knitr::kable(digits = 3)
 ```
 
 ```{r fill missing}
+#fill missing function
 fill_missing = function(x) {
+  #numeric variables
   if (is.numeric(x)) {
     x = ifelse(is.na(x),mean(x,na.rm = TRUE), x)
   }
+  #character variables
   else if (is.character(x)) {
     x = ifelse(is.na(x),"virginica",x)
   }
 }
 
+#map fill_missing function
 iris_no_missing <- map_dfr(iris_with_missing,fill_missing)
-  
+
+#checking no missing
+miss_var_summary(iris_no_missing) %>% knitr::kable(digits = 3)
 ```
 
