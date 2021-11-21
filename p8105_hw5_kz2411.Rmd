@@ -93,6 +93,7 @@ city_plot <- city_prop_data %>%
 
 city_plot
 ```
+
 Richmond has the lowest estimate and Chicago has the highest estimate and is apparently higher than any other city.
 
 ## Problem 2
@@ -129,7 +130,7 @@ data_clean <- combine_data %>%
     group_id = gsub(".csv","",group_id)
   ) %>%
   separate(group_id,c("group","subject_id"),sep = '_')
-data_clean
+data_clean %>% knitr::kable(digits = 3)
 ```
 
 ```{r plot spaghetti}
@@ -186,7 +187,7 @@ fill_missing = function(x) {
 }
 
 #map fill_missing function
-iris_no_missing <- map_dfr(iris_with_missing,fill_missing)
+iris_no_missing <- map_df(iris_with_missing,fill_missing)
 iris_no_missing
 
 #checking no missing
